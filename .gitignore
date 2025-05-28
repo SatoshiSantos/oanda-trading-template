@@ -1,0 +1,23 @@
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment folders
+env/
+.venv/
+
+# Configs with secrets (API tokens, etc.)
+config/user_config.json
+
+# IDE/editor metadata
+.idea/
+.vscode/
+
+# OS-specific
+.DS_Store
+
+# Logs or data dumps 
+*.log
+data/
