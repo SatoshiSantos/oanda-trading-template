@@ -2,6 +2,7 @@
 from oandapyV20 import API
 from oandapyV20.endpoints.accounts import AccountDetails
 from oandapyV20.exceptions import V20Error
+from oandapyV20.endpoints.accounts import AccountInstruments
 from PySide6.QtWidgets import (
     QApplication,
     QWidget,
@@ -15,8 +16,9 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
 )
-from PySide6.QtCore import QDateTime  # , Qt
+from PySide6.QtCore import QDateTime, Qt
 import sys
+from main import run_strategy
 
 # import requests
 
@@ -113,6 +115,36 @@ class MainWindow(QWidget):
         self.rr_ratio_input = QLineEdit()
         self.rr_ratio_input.setPlaceholderText("Risk:Reward Ratio (e.g., 1:2)")
 
+        # Trading Pair
+        self.pair_label = QLabel("Trading Pair:")
+        self.pair_dropdown = QComboBox()
+        self.pair_dropdown.setEnabled(False)  # Disabled until API connection
+
+        # Time Frame
+        self.timeframe_label = QLabel("Time Frame:")
+        self.timeframe_dropdown = QComboBox()
+        self.timeframe_dropdown.addItems(
+            ["M1", "M5", "M15", "M30", "H1", "H4", "D", "W", "M"]
+        )
+
+        # Strategy selector
+        self.strategy_label = QLabel("Select Strategy:")
+        self.strategy_dropdown = QComboBox()
+        self.strategy_dropdown.addItems(
+            [
+                "ExampleStrategy",  # later dynamically load from the `strategies/` folder
+            ]
+        )
+
+        # Back test run mode live vs backtest
+        self.run_mode_label = QLabel("Run Mode:")
+        self.run_mode_dropdown = QComboBox()
+        self.run_mode_dropdown.addItems(["Live", "Backtest"])
+
+        # Start button
+        self.launch_button = QPushButton("Start")
+        self.launch_button.clicked.connect(self.launch_strategy)
+
         # --- Layout ---
         layout = QVBoxLayout()
         # API Input
@@ -126,11 +158,20 @@ class MainWindow(QWidget):
         layout.addWidget(self.env_dropdown)
         # connect button
         layout.addWidget(self.connect_button)
-        # Risk & Trade Config
+        layout.addWidget(self.strategy_label)
+        # Trading Pair
+        layout.addWidget(self.pair_label)
+        layout.addWidget(self.pair_dropdown)
+        # Trading time frame
+        layout.addWidget(self.timeframe_label)
+        layout.addWidget(self.timeframe_dropdown)
+        # Risk input
         layout.addWidget(self.risk_label)
         layout.addWidget(self.risk_input)
+        # Drawdown input
         layout.addWidget(self.drawdown_label)
         layout.addWidget(self.drawdown_input)
+        # Trade direction input
         layout.addWidget(self.direction_label)
         layout.addWidget(self.direction_dropdown)
         # Date range
@@ -155,6 +196,12 @@ class MainWindow(QWidget):
         # TP strategy inputs
         layout.addWidget(self.tp_pips_input)
         layout.addWidget(self.rr_ratio_input)
+        # Strategy selection dropdown
+        layout.addWidget(self.strategy_dropdown)
+        layout.addWidget(self.run_mode_label)
+        # Run mode drop down
+        layout.addWidget(self.run_mode_dropdown)
+        layout.addWidget(self.launch_button)
 
         # Initialize with correct SL/TP visibility
         self.update_sl_inputs()
@@ -221,6 +268,61 @@ class MainWindow(QWidget):
             )
         except V20Error as e:
             QMessageBox.critical(self, "Connection Error", str(e))
+
+        try:
+            instruments_request = AccountInstruments(accountID=account_id)
+            instruments_response = client.request(instruments_request)
+
+            self.pair_dropdown.clear()
+            for item in instruments_response["instruments"]:
+                self.pair_dropdown.addItem(item["name"])
+
+            self.pair_dropdown.setEnabled(True)
+
+        except V20Error as e:
+            QMessageBox.critical(
+                self, "Instrument Fetch Error", f"Could not fetch instruments:\n{e}"
+            )
+
+    def launch_strategy(self):
+        config = {
+            "account_id": self.account_id_input.text().strip(),
+            "token": self.token_input.text().strip(),
+            "environment": self.env_dropdown.currentText(),
+            "strategy": self.strategy_dropdown.currentText(),  # Allow selection
+            "risk_per_trade": self.risk_input.text(),
+            "max_drawdown": self.drawdown_input.text(),
+            "trade_direction": self.direction_dropdown.currentText(),
+            "start_time": self.start_input.dateTime().toString(Qt.ISODate),
+            "end_time": self.end_input.dateTime().toString(Qt.ISODate),
+            "news_buffer": self.news_buffer_input.text(),
+            "news_impact": {
+                "high": self.news_high.isChecked(),
+                "medium": self.news_med.isChecked(),
+                "low": self.news_low.isChecked(),
+            },
+            "pair": self.pair_dropdown.currentText(),
+            "timeframe": self.timeframe_dropdown.currentText(),
+            "sl_strategy": self.sl_strategy_combo.currentText(),
+            "tp_strategy": self.tp_strategy_combo.currentText(),
+            "sl_pips": self.sl_pips_input.text(),
+            "trailing_distance": self.trailing_distance_input.text(),
+            "ema_period": self.ema_period_input.text(),
+            "tp_pips": self.tp_pips_input.text(),
+            "rr_ratio": self.rr_ratio_input.text(),
+            "run_mode": self.run_mode_dropdown.currentText(),
+        }
+
+        try:
+            if config["run_mode"] == "Live":
+                run_strategy(config)  # live trading
+            else:
+                # Placeholder: you’ll later implement this
+                QMessageBox.information(
+                    self, "Backtest", "Backtest not implemented yet."
+                )
+        except Exception as e:
+            QMessageBox.critical(self, "Strategy Error", str(e))
 
 
 if __name__ == "__main__":
