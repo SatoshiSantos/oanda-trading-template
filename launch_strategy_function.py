@@ -1,3 +1,5 @@
+# launch_strategy_function.py
+
 import os
 import glob
 import importlib
@@ -68,6 +70,8 @@ def launch_strategy(self):
             "medium": self.news_med.isChecked(),
             "low": self.news_low.isChecked(),
         },
+        "finnhub_api_key": self.finnhub_api_input.text().strip(),
+        "news_filter_quote_currency": self.news_quote_checkbox.isChecked(),
         "pair": instrument,
         "timeframe": self.timeframe_dropdown.currentText(),
         # SL and TP strategy selections

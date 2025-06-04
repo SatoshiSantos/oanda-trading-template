@@ -14,8 +14,12 @@ class Strategy(StrategyBase):
 
         # TODO: Trade direction logic
 
+        # Hard code direction for now to avoid Return None error [Trailing SL] Invalid direction provided.
+
+        self.config["direction"] = "Buy"
+
         # Compute SL and TP
-        if "current_price" not in self.config or "direction" not in self.config:
+        if "current_price" not in self.config:  # or "direction" not in self.config:
             raise ValueError("[Config] Missing current_price or direction in config.")
 
         sl_handler = StopLossStrategy(self.config)

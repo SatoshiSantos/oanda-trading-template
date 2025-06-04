@@ -21,6 +21,29 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QDateTime, Qt
 import sys
 from launch_strategy_function import load_strategies, launch_strategy
+import json
+import os
+
+
+# Load user_config.json file for persistance
+CONFIG_PATH = os.path.join("config", "user_config.json")
+
+
+def load_config_from_file():
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH, "r") as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {}
+    return {}
+
+
+# Save user_config.json file for persistance
+def save_config_to_file(config):
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+    with open(CONFIG_PATH, "w") as f:
+        json.dump(config, f, indent=4)
 
 
 class MainWindow(QWidget):
@@ -116,11 +139,22 @@ class MainWindow(QWidget):
         self.news_high = QCheckBox("High")
         self.news_med = QCheckBox("Medium")
         self.news_low = QCheckBox("Low")
-        self.news_high.setChecked(True)
+        self.news_high.stateChanged.connect(self.update_news_inputs_visibility)
+        self.news_med.stateChanged.connect(self.update_news_inputs_visibility)
+        self.news_low.stateChanged.connect(self.update_news_inputs_visibility)
+        self.finnhub_api_label = QLabel("Finnhub API Key:")
+        self.finnhub_api_input = QLineEdit()
+        self.news_quote_checkbox = QCheckBox("Filter by Quote Currency Too")
+        self.finnhub_api_label.setVisible(False)
+        self.finnhub_api_input.setVisible(False)
+        self.news_quote_checkbox.setVisible(False)
         news_impact_row = QHBoxLayout()
         news_impact_row.addWidget(self.news_high)
         news_impact_row.addWidget(self.news_med)
         news_impact_row.addWidget(self.news_low)
+        schedule_layout.addWidget(self.finnhub_api_label, 4, 0)
+        schedule_layout.addWidget(self.finnhub_api_input, 4, 1)
+        schedule_layout.addWidget(self.news_quote_checkbox, 5, 1)
         schedule_layout.addWidget(self.start_label, 0, 0)
         schedule_layout.addWidget(self.start_input, 0, 1)
         schedule_layout.addWidget(self.end_label, 1, 0)
@@ -169,12 +203,29 @@ class MainWindow(QWidget):
 
         # --- Launch Button ---
         self.launch_button = QPushButton("Start")
-        self.launch_button.clicked.connect(lambda: launch_strategy(self))
+        self.launch_button.clicked.connect(self.handle_launch)
         main_layout.addWidget(self.launch_button)
 
+        # Load saved config data
+        self.load_user_config()
+
+        # Set main window layout
         self.setLayout(main_layout)
+
+        # update inputs
         self.update_sl_inputs()
         self.update_tp_inputs()
+        self.update_news_inputs_visibility()
+
+    def update_news_inputs_visibility(self):
+        any_checked = (
+            self.news_high.isChecked()
+            or self.news_med.isChecked()
+            or self.news_low.isChecked()
+        )
+        self.finnhub_api_label.setVisible(any_checked)
+        self.finnhub_api_input.setVisible(any_checked)
+        self.news_quote_checkbox.setVisible(any_checked)
 
     def update_sl_inputs(self):
         self.sl_pips_input.setVisible(False)
@@ -221,6 +272,109 @@ class MainWindow(QWidget):
             )
         except V20Error as e:
             QMessageBox.critical(self, "Connection Error", str(e))
+
+    # load saved user config from json file to the gui
+    def load_user_config(self):
+        config = load_config_from_file()
+
+        self.token_input.setText(config.get("token", ""))
+        self.account_id_input.setText(config.get("account_id", ""))
+        self.env_dropdown.setCurrentText(config.get("environment", "practice"))
+        self.pair_dropdown.setCurrentText(config.get("pair", "EUR_USD"))
+        self.timeframe_dropdown.setCurrentText(config.get("timeframe", "M15"))
+        self.strategy_dropdown.setCurrentText(config.get("strategy", "ExampleStrategy"))
+        self.run_mode_dropdown.setCurrentText(config.get("run_mode", "Live"))
+
+        self.risk_input.setText(str(config.get("risk_per_trade", "")))
+        self.drawdown_input.setText(str(config.get("max_drawdown", "")))
+        self.direction_dropdown.setCurrentText(
+            config.get("trade_direction", "Buy only")
+        )
+
+        self.start_input.setDateTime(
+            QDateTime.fromString(
+                config.get("start_time", QDateTime.currentDateTime().toString())
+            )
+        )
+        self.end_input.setDateTime(
+            QDateTime.fromString(
+                config.get("end_time", QDateTime.currentDateTime().toString())
+            )
+        )
+        self.news_buffer_input.setText(str(config.get("news_buffer_minutes", "")))
+
+        self.news_high.setChecked(config.get("news_impact", {}).get("high", False))
+        self.news_med.setChecked(config.get("news_impact", {}).get("medium", False))
+        self.news_low.setChecked(config.get("news_impact", {}).get("low", False))
+
+        self.sl_strategy_combo.setCurrentText(
+            config.get("sl_strategy", "Fixed SL (pips)")
+        )
+
+        self.sl_pips_input.setText(config.get("sl_pips", ""))
+        self.trailing_distance_input.setText(config.get("trailing_distance", ""))
+        self.ema_period_input.setText(config.get("ema_period", ""))
+        self.tp_strategy_combo.setCurrentText(
+            config.get("tp_strategy", "Fixed TP (pips)")
+        )
+        self.tp_pips_input.setText(config.get("tp_pips", ""))
+        self.rr_ratio_input.setText(config.get("rr_ratio", ""))
+
+        self.finnhub_api_input.setText(config.get("finnhub_api_key", ""))
+        self.news_quote_checkbox.setChecked(
+            config.get("news_filter_quote_currency", False)
+        )
+
+        self.update_news_inputs_visibility()
+        self.update_sl_inputs()
+        self.update_tp_inputs()
+
+    """
+    handle_launch(self): & save_user_config(self): save user config at 
+    
+    launch When the GUI opens, the users previous settings auto-populate.
+
+    When the user clicks "Start", the current settings are saved.
+
+    No manual user interaction is needed to load or save.
+    """
+
+    def handle_launch(self):
+        self.save_user_config()
+        launch_strategy(self)
+
+    def save_user_config(self):
+        config = {
+            "token": self.token_input.text().strip(),
+            "account_id": self.account_id_input.text().strip(),
+            "environment": self.env_dropdown.currentText(),
+            "pair": self.pair_dropdown.currentText(),
+            "timeframe": self.timeframe_dropdown.currentText(),
+            "strategy": self.strategy_dropdown.currentText(),
+            "run_mode": self.run_mode_dropdown.currentText(),
+            "risk_per_trade": self.risk_input.text().strip(),
+            "max_drawdown": self.drawdown_input.text().strip(),
+            "trade_direction": self.direction_dropdown.currentText(),
+            "start_time": self.start_input.dateTime().toString(),
+            "end_time": self.end_input.dateTime().toString(),
+            "news_buffer_minutes": self.news_buffer_input.text().strip(),
+            "news_impact": {
+                "high": self.news_high.isChecked(),
+                "medium": self.news_med.isChecked(),
+                "low": self.news_low.isChecked(),
+            },
+            "finnhub_api_key": self.finnhub_api_input.text().strip(),
+            "news_filter_quote_currency": self.news_quote_checkbox.isChecked(),
+            "sl_strategy": self.sl_strategy_combo.currentText(),
+            "sl_pips": self.sl_pips_input.text().strip(),
+            "trailing_distance": self.trailing_distance_input.text().strip(),
+            "ema_period": self.ema_period_input.text().strip(),
+            "tp_strategy": self.tp_strategy_combo.currentText(),
+            "tp_pips": self.tp_pips_input.text().strip(),
+            "rr_ratio": self.rr_ratio_input.text().strip(),
+        }
+
+        save_config_to_file(config)
 
 
 if __name__ == "__main__":

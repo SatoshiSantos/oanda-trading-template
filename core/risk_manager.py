@@ -1,4 +1,5 @@
 from utils.price_tools import get_pip_value
+from utils.account_tools import get_account_details
 
 """
 Use dynamic stop loss distance: by computing pip distance between entry_price and stop_loss_price.
@@ -14,7 +15,7 @@ class RiskManager:
         self.config = config
 
         try:
-            self.account_balance = float(config["account_balance"])
+            self.account_balance = float(self.config["account_balance"])
         except KeyError:
             raise ValueError("[RiskManager] 'account_balance' is required in config.")
         except ValueError:

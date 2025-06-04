@@ -3,6 +3,10 @@
 import pandas as pd
 from oandapyV20.endpoints.instruments import InstrumentsCandles
 from oandapyV20 import API
+from PySide6.QtWidgets import QMessageBox
+from oandapyV20.exceptions import V20Error
+from oandapyV20.endpoints.pricing import PricingInfo
+import sys
 
 
 def get_pip_value(pair):
@@ -40,20 +44,25 @@ def calculate_trailing_stop(
     else:
         raise ValueError("[Trailing SL] Invalid direction provided.")
 
-    # Feth current price
-    def fetch_current_price(token, account_id, environment, instrument):
-        try:
-            client = API(access_token=token, environment=environment)
-            params = {"instruments": instrument}
-            r = PricingInfo(accountID=account_id, params=params)
-            response = client.request(r)
-            prices = response["prices"][0]
-            # Return the average of bid and ask as current price
-            bid = float(prices["bids"][0]["price"])
-            ask = float(prices["asks"][0]["price"])
-            return round((bid + ask) / 2, 5)
 
-        except V20Error as e:
+# Feth current price
+def fetch_current_price(token, account_id, environment, instrument):
+    try:
+        client = API(access_token=token, environment=environment)
+        params = {"instruments": instrument}
+        r = PricingInfo(accountID=account_id, params=params)
+        response = client.request(r)
+        prices = response["prices"][0]
+        # Return the average of bid and ask as current price
+        bid = float(prices["bids"][0]["price"])
+        ask = float(prices["asks"][0]["price"])
+        return round((bid + ask) / 2, 5)
+
+    except V20Error as e:
+        if "PySide6" in sys.modules:
             QMessageBox.critical(
-                "Price Fetch Error", f"Could not fetch instrumentscurrent price:\n{e}"
+                None, "Price Fetch Error", f"Could not fetch instrument price:\n{e}"
             )
+            print(f"[ERROR] Could not fetch price: {e}")
+        else:
+            print(f"[ERROR] Could not fetch price: {e}")

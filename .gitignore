@@ -10,6 +10,7 @@ env/
 
 # Configs with secrets (API tokens, etc.)
 config/user_config.json
+env.txt
 
 # IDE/editor metadata
 .idea/
@@ -21,3 +22,4 @@ config/user_config.json
 # Logs or data dumps 
 *.log
 data/
+
