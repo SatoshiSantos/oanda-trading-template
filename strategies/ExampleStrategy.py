@@ -1,43 +1,42 @@
-# strategies/strategy_template.py
+# strategies/ExampleStrategy.py
 
-from abc import ABC, abstractmethod
-
-
-class StrategyBase(ABC):
-    def __init__(
-        self,
-        config,
-        position_size=None,
-        risk_manager=None,
-        take_profit=None,
-        stop_loss=None,
-        pair=None,
-        chart_timeframe=None,
-    ):
-        self.config = config
-        self.position_size = position_size
-        self.risk_manager = risk_manager
-        self.take_profit = take_profit
-        self.stop_loss = stop_loss
-        self.pair = pair
-        self.chart_timeframe = chart_timeframe
-
-    @abstractmethod
-    def run(self):
-        """Execute the strategy logic."""
-        pass
+from strategies.base_strategy import StrategyBase
+from core.risk_manager import RiskManager
+from core.sl_strategies import StopLossStrategy
+from core.tp_strategies import TakeProfitStrategy
 
 
 class Strategy(StrategyBase):
     def run(self):
-        print("[STRATEGY] Running example strategy...")
+        print(f"[{self.__class__.__name__}] Strategy is now running.")
+        print(f"Pair: {self.pair}, Timeframe: {self.chart_timeframe}")
+        print(f"News Filter Active: {self.news_filter is not None}")
 
-        # Use news filter if enabled
-        if self.news_filter and not self.news_filter.is_trade_time():
-            print("[STRATEGY] Skipping trade due to nearby news event.")
-            return
+        # TODO: Trade direction logic
 
-        # Dummy trade logic
-        print(
-            f"[STRATEGY] Placing dummy trade for {self.pair} on {self.chart_timeframe} timeframe"
+        # Compute SL and TP
+        if "current_price" not in self.config or "direction" not in self.config:
+            raise ValueError("[Config] Missing current_price or direction in config.")
+
+        sl_handler = StopLossStrategy(self.config)
+        tp_handler = TakeProfitStrategy(self.config)
+
+        stop_loss_price = sl_handler.get_stop_loss(self.current_price, self.direction)
+        take_profit_price = tp_handler.get_take_profit(
+            self.current_price, self.direction, stop_loss_price
         )
+
+        # Compute position size dynamically based on SL distance
+        risk_manager = RiskManager(self.config)
+        position_size = risk_manager.calculate_position_size(
+            entry_price=self.current_price, stop_loss_price=stop_loss_price
+        )
+
+        # Log results
+        print(f"Entry Price: {self.current_price}")
+        print(f"Stop Loss: {stop_loss_price}")
+        print(f"Take Profit: {take_profit_price}")
+        print(f"Computed Position Size: {position_size}")
+
+        # Placeholder for trade execution
+        print(f"[{self.__class__.__name__}] Trade logic not implemented.")
