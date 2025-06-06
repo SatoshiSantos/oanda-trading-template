@@ -37,9 +37,9 @@ def calculate_trailing_stop(
     """
     Adjust the SL only in the profit direction
     """
-    if direction == "buy":
+    if direction == "Buy":
         return round(current_price - pip_distance * pip_value, 5)
-    elif direction == "sell":
+    elif direction == "Sell":
         return round(current_price + pip_distance * pip_value, 5)
     else:
         raise ValueError("[Trailing SL] Invalid direction provided.")

@@ -40,7 +40,7 @@ class StopLossStrategy:
             raise ValueError("[SL Strategy] Invalid 'sl_pips' value in config.")
 
         pip_value = get_pip_value(self.config.get("pair", ""))
-        if direction == "buy":
+        if direction == "Buy":
             return round(current_price - (pips * pip_value), 5)
         else:
             return round(current_price + (pips * pip_value), 5)
@@ -78,7 +78,7 @@ class StopLossStrategy:
             raise RuntimeError(f"[SL Strategy] Failed to fetch data for EMA SL: {e}")
 
         # SL follows the EMA only on the profit side
-        if direction == "buy":
+        if direction == "Buy":
             return round(min(current_price, ema_value), 5)
         else:
             return round(max(current_price, ema_value), 5)

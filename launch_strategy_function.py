@@ -10,6 +10,9 @@ from oandapyV20.exceptions import V20Error
 from oandapyV20.endpoints.pricing import PricingInfo
 from PySide6.QtCore import Qt
 from utils.price_tools import fetch_current_price
+from threading import Event
+
+stop_flag = Event()
 
 
 def load_strategies(self):
@@ -31,7 +34,7 @@ def load_strategies(self):
     self.strategy_dropdown.addItems(strategies)
 
 
-def launch_strategy(self):
+def launch_strategy(self, stop_flag=None):
     token = self.token_input.text().strip()
     account_id = self.account_id_input.text().strip()
     environment = self.env_dropdown.currentText()
@@ -45,13 +48,13 @@ def launch_strategy(self):
         )
         return
 
-    trade_direction = self.direction_dropdown.currentText().lower()
-    if trade_direction.startswith("buy"):
-        direction = "buy"
-    elif trade_direction.startswith("sell"):
-        direction = "sell"
+    trade_direction = self.direction_dropdown.currentText()
+    if trade_direction.startswith("Buy"):
+        direction = "Buy"
+    elif trade_direction.startswith("Sell"):
+        direction = "Sell"
     else:
-        direction = None  # Strategy decides at runtime
+        direction = "Both"  # Strategy decides at runtime
 
     config = {
         "account_id": account_id,
@@ -74,6 +77,7 @@ def launch_strategy(self):
         "news_filter_quote_currency": self.news_quote_checkbox.isChecked(),
         "pair": instrument,
         "timeframe": self.timeframe_dropdown.currentText(),
+        "stop_flag": stop_flag,
         # SL and TP strategy selections
         "sl_strategy": self.sl_strategy_combo.currentText(),
         "tp_strategy": self.tp_strategy_combo.currentText(),

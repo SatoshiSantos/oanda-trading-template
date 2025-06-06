@@ -9,6 +9,8 @@ Raise detailed errors for missing or invalid config keys like account_balance an
 Return position size in units as expected by OANDA (not lots or fractional values).
 """
 
+MAX_POSITION_SIZE = 100000  # Cap to avoid OANDA rejection
+
 
 class RiskManager:
     def __init__(self, config):
@@ -47,4 +49,4 @@ class RiskManager:
         risk_amount = self.account_balance * self.risk_per_trade
         units = risk_amount / (pip_distance * pip_value)
 
-        return int(units)  # OANDA expects trade size in units
+        return min(int(units), MAX_POSITION_SIZE)  # Cap position size

@@ -24,7 +24,7 @@ class TakeProfitStrategy:
             raise ValueError("[TP Strategy] Invalid 'tp_pips' value in config.")
 
         pip_value = get_pip_value(self.config.get("pair", ""))
-        if direction == "buy":
+        if direction == "Buy":
             return round(entry_price + pips * pip_value, 5)
         else:
             return round(entry_price - pips * pip_value, 5)
@@ -47,7 +47,7 @@ class TakeProfitStrategy:
         risk_pips = abs(entry_price - stop_loss_price) / pip_value
         reward_pips = (reward / risk) * risk_pips
 
-        if direction == "buy":
+        if direction == "Buy":
             return round(entry_price + reward_pips * pip_value, 5)
         else:
             return round(entry_price - reward_pips * pip_value, 5)

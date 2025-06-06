@@ -24,6 +24,7 @@ class MaxDrawdownChecker:
             current_balance = self._fetch_account_balance()
             self.daily_data[self.today] = current_balance
             self._save_data()
+        # print(f"Todays Starting Balance {self.daily_data}")
 
     def _fetch_account_balance(self):
         request = AccountSummary(accountID=self.account_id)
@@ -38,4 +39,7 @@ class MaxDrawdownChecker:
         current_balance = self._fetch_account_balance()
         starting_balance = self.daily_data[self.today]
         drawdown = starting_balance - current_balance
-        return drawdown >= self.max_drawdown_amount
+        # print(f"Current drawdown {drawdown}")
+        max = self.max_drawdown_amount / 100 * starting_balance
+        # print(f"max drawdown converted  {max}")
+        return drawdown >= max

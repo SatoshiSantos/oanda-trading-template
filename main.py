@@ -8,11 +8,25 @@ from oandapyV20 import API
 from core.trading_time import is_within_trading_window
 from PySide6.QtWidgets import QMessageBox
 from utils.account_tools import account_balance
+import os
 
 
 def run_strategy(config, gui_parent=None):
     """Main entry point for running a strategy."""
-    print("[INFO] Running strategy with config:", config)
+    print("[INFO] Strategy Launch Details:")
+    print(f"  Account ID: {config.get('account_id')}")
+    print(f"  Environment: {config.get('environment')}")
+    print(f"  Pair: {config.get('pair')}")
+    print(f"  Timeframe: {config.get('timeframe')}")
+    print(f"  Strategy: {config.get('strategy')}")
+    print(f"  Direction: {config.get('direction')}")
+    print(
+        f"  SL Strategy: {config.get('sl_strategy')}, TP Strategy: {config.get('tp_strategy')}"
+    )
+    print(
+        f"  Risk per Trade: {config.get('risk_per_trade')}%, Max Drawdown: {config.get('max_drawdown')}%"
+    )
+    print(f"  News Filter Active: {any(config.get('news_impact', {}).values())}")
 
     # --- Step 1: Validate config ---
     required_keys = ["account_id", "token", "environment", "strategy"]
@@ -20,6 +34,11 @@ def run_strategy(config, gui_parent=None):
         if key not in config or not config[key]:
             raise ValueError(f"Missing required config key: {key}")
 
+    config["account_balance"] = account_balance(
+        token=config["token"],
+        account_id=config["account_id"],
+        environment=config["environment"],
+    )
     # Step 1.5: OANDA API client setup
     client = API(access_token=config["token"], environment=config["environment"])
 
@@ -30,6 +49,11 @@ def run_strategy(config, gui_parent=None):
             max_dd = float(max_dd_str)
             if max_dd > 0:
                 drawdown_checker = MaxDrawdownChecker(config, client)
+                print(f"Current Account Balance {config['account_balance']}")
+                print(f"Max Drawdown input {drawdown_checker.max_drawdown_amount}")
+                print(f"Draw Down exceed {drawdown_checker.is_drawdown_exceeded()}")
+
+                # check daily drawdown
                 if drawdown_checker.is_drawdown_exceeded():
                     msg = "[HALT] Max drawdown amount reached. Trading suspended for today."
                     print(msg)
@@ -78,12 +102,6 @@ def run_strategy(config, gui_parent=None):
         raise ValueError("[Config] 'direction' must be specified in the config.")
     direction = config["direction"]
 
-    config["account_balance"] = account_balance(
-        token=config["token"],
-        account_id=config["account_id"],
-        environment=config["environment"],
-    )
-
     # --- Step 3: Load and validate strategy class dynamically ---
     strategy_name = config["strategy"]
     try:
@@ -106,7 +124,7 @@ def run_strategy(config, gui_parent=None):
 
     # --- Step 4: Run strategy ---
     try:
-        strategy.run()
+        strategy.run(stop_flag=config.get("stop_flag"))
         if gui_parent:
             QMessageBox.information(
                 gui_parent,

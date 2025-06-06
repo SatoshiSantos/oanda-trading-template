@@ -21,8 +21,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QDateTime, Qt
 import sys
 from launch_strategy_function import load_strategies, launch_strategy
+from utils.trade_tools import close_all_positions
 import json
 import os
+import threading
 
 
 # Load user_config.json file for persistance
@@ -49,6 +51,10 @@ def save_config_to_file(config):
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
+        self.start_requested = False
+        self.stop_requested = False
+        self.API_connected = False
+
         self.setWindowTitle("OANDA Trading App")
 
         main_layout = QVBoxLayout()
@@ -205,6 +211,14 @@ class MainWindow(QWidget):
         self.launch_button = QPushButton("Start")
         self.launch_button.clicked.connect(self.handle_launch)
         main_layout.addWidget(self.launch_button)
+        # --- Stop Button ---
+        self.stop_button = QPushButton("Stop")
+        self.stop_button.clicked.connect(self.handle_stop)
+        main_layout.addWidget(self.stop_button)
+        # --- Close All Trades Button ---
+        self.close_all_trades_button = QPushButton("close all trades")
+        self.close_all_trades_button.clicked.connect(self.handle_close_all_trades)
+        main_layout.addWidget(self.close_all_trades_button)
 
         # Load saved config data
         self.load_user_config()
@@ -270,6 +284,7 @@ class MainWindow(QWidget):
                 "Connected",
                 f"Connected to OANDA. Balance: {response['account']['balance']}",
             )
+            self.API_connected = True
         except V20Error as e:
             QMessageBox.critical(self, "Connection Error", str(e))
 
@@ -287,9 +302,7 @@ class MainWindow(QWidget):
 
         self.risk_input.setText(str(config.get("risk_per_trade", "")))
         self.drawdown_input.setText(str(config.get("max_drawdown", "")))
-        self.direction_dropdown.setCurrentText(
-            config.get("trade_direction", "Buy only")
-        )
+        self.direction_dropdown.setCurrentText(config.get("trade_direction"))
 
         self.start_input.setDateTime(
             QDateTime.fromString(
@@ -340,8 +353,28 @@ class MainWindow(QWidget):
     """
 
     def handle_launch(self):
-        self.save_user_config()
-        launch_strategy(self)
+        self.stop_requested = False  # Reset stop flag
+        self.start_requested = True  # Set start flag
+        self.save_user_config()  # save user config
+        # Run strategy in a new thread so GUI doesn't freeze
+        threading.Thread(
+            target=launch_strategy,
+            args=(self,),
+            kwargs={"stop_flag": lambda: self.stop_requested},
+            daemon=True,
+        ).start()
+
+    def handle_stop(self):
+        if self.start_requested:  # Check if strategy launched
+            self.stop_requested = True  # set stop flag
+            QMessageBox.information(
+                self, "Strategy Halt", "Stop requested. Strategy terminate."
+            )
+            self.start_requested = False  # Reset start flag
+        else:
+            QMessageBox.information(
+                self, "Stop Requested: Error", "Strategy has not been launched."
+            )
 
     def save_user_config(self):
         config = {
@@ -375,6 +408,33 @@ class MainWindow(QWidget):
         }
 
         save_config_to_file(config)
+
+    def handle_close_all_trades(self):
+        if self.API_connected:
+            token = self.token_input.text().strip()
+            account_id = self.account_id_input.text().strip()
+            environment = self.env_dropdown.currentText()
+
+            if not token or not account_id:
+                QMessageBox.warning(
+                    self, "Missing Info", "Please enter API token and account ID."
+                )
+                return
+
+            closed = close_all_positions(token, account_id, environment)
+
+            if closed:
+                QMessageBox.information(
+                    self, "Success", f"Closed {len(closed)} open position(s)."
+                )
+            else:
+                QMessageBox.information(
+                    self, "No Positions", "No open positions were found."
+                )
+        else:
+            QMessageBox.information(
+                self, "Close All Trades: Error", "API not connected."
+            )
 
 
 if __name__ == "__main__":
