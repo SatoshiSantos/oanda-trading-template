@@ -20,11 +20,11 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import QDateTime, Qt
 import sys
-from launch_strategy_function import load_strategies, launch_strategy
+from launch_strategy import load_strategies, launch_strategy
 from utils.trade_tools import close_all_positions
 import json
 import os
-import threading
+from threading import Thread
 
 
 # Load user_config.json file for persistance
@@ -356,13 +356,12 @@ class MainWindow(QWidget):
         self.stop_requested = False  # Reset stop flag
         self.start_requested = True  # Set start flag
         self.save_user_config()  # save user config
+
         # Run strategy in a new thread so GUI doesn't freeze
-        threading.Thread(
-            target=launch_strategy,
-            args=(self,),
-            kwargs={"stop_flag": lambda: self.stop_requested},
-            daemon=True,
-        ).start()
+        def background_launch():
+            launch_strategy(self, stop_flag=lambda: self.stop_requested)
+
+        Thread(target=background_launch).start()
 
     def handle_stop(self):
         if self.start_requested:  # Check if strategy launched

@@ -1,16 +1,12 @@
-# launch_strategy_function.py
-
+# launch_strategy.py
 import os
 import glob
-import importlib
-from PySide6.QtWidgets import QMessageBox
-from main import run_strategy
-from oandapyV20 import API
-from oandapyV20.exceptions import V20Error
-from oandapyV20.endpoints.pricing import PricingInfo
-from PySide6.QtCore import Qt
-from utils.price_tools import fetch_current_price
+import threading
 from threading import Event
+from PySide6.QtWidgets import QMessageBox
+from PySide6.QtCore import Qt
+from main import run_strategy
+from utils.price_tools import fetch_current_price
 
 stop_flag = Event()
 
@@ -61,10 +57,9 @@ def launch_strategy(self, stop_flag=None):
         "token": token,
         "environment": environment,
         "strategy": self.strategy_dropdown.currentText(),
-        # Add additional parameters from your GUI
         "risk_per_trade": self.risk_input.text(),
         "max_drawdown": self.drawdown_input.text(),
-        "trade_direction": self.direction_dropdown.currentText(),
+        "trade_direction": trade_direction,
         "start_time": self.start_input.dateTime().toString(Qt.ISODate),
         "end_time": self.end_input.dateTime().toString(Qt.ISODate),
         "news_buffer": self.news_buffer_input.text(),
@@ -78,7 +73,6 @@ def launch_strategy(self, stop_flag=None):
         "pair": instrument,
         "timeframe": self.timeframe_dropdown.currentText(),
         "stop_flag": stop_flag,
-        # SL and TP strategy selections
         "sl_strategy": self.sl_strategy_combo.currentText(),
         "tp_strategy": self.tp_strategy_combo.currentText(),
         "sl_pips": self.sl_pips_input.text(),
@@ -87,15 +81,19 @@ def launch_strategy(self, stop_flag=None):
         "tp_pips": self.tp_pips_input.text(),
         "rr_ratio": self.rr_ratio_input.text(),
         "run_mode": self.run_mode_dropdown.currentText(),
-        # Real-time price info
         "current_price": current_price,
-        "direction": direction,  # May be None if "Both" selected
+        "direction": direction,
     }
 
-    try:
-        if config["run_mode"] == "Live":
-            run_strategy(config)
-        else:
-            QMessageBox.information(self, "Backtest", "Backtest not implemented yet.")
-    except Exception as e:
-        QMessageBox.critical(self, "Strategy Error", str(e))
+    def run_in_thread():
+        try:
+            if config["run_mode"] == "Live":
+                run_strategy(config, gui_parent=self)
+            else:
+                QMessageBox.information(
+                    self, "Backtest", "Backtest not implemented yet."
+                )
+        except Exception as e:
+            QMessageBox.critical(self, "Strategy Error", str(e))
+
+    threading.Thread(target=run_in_thread, daemon=True).start()
