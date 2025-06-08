@@ -1,7 +1,6 @@
 # strategies/ExampleStrategy.py
 
 import time
-from time import datetime
 from strategies.base_strategy import StrategyBase
 from core.risk_manager import RiskManager
 from core.sl_strategies import StopLossStrategy
@@ -9,6 +8,7 @@ from core.tp_strategies import TakeProfitStrategy
 from core.trade_manager import TradeManager
 from oandapyV20 import API
 from oandapyV20.endpoints.orders import OrderCreate
+from utils.price_tools import is_market_open
 
 
 class Strategy(StrategyBase):
@@ -59,28 +59,53 @@ class Strategy(StrategyBase):
                 }
             }
 
-            try:
-                r = OrderCreate(accountID=self.config["account_id"], data=order_data)
-                response = client.request(r)
-                print(f"[ORDER PLACED] Trade executed successfully: {response}")
+            # TODO: Trading conditions
 
-                trade_id = response["orderCreateTransaction"]["id"]
-                timestamp = response["orderCreateTransaction"]["time"]
+            # check if maret open
+            if is_market_open(client, self.config["account_id"], self.pair):
 
-                trade_manager.register_trade(
-                    trade_id=trade_id,
-                    trade_info={
-                        "timestamp": timestamp,
-                        "instrument": self.pair,
-                        "units": position_size,
-                        "direction": direction,
-                        "entry_price": self.current_price,
-                        "stop_loss": stop_loss_price,
-                        "take_profit": take_profit_price,
-                    },
-                )
+                try:
+                    r = OrderCreate(
+                        accountID=self.config["account_id"], data=order_data
+                    )
+                    response = client.request(r)
+                    print(f"[ORDER PLACED] Trade executed successfully: {response}")
 
-            except Exception as e:
-                print(f"[ERROR] Failed to place order: {e}")
+                    # Check if order was created
+                    if "orderCreateTransaction" in response:
+                        trade_id = response["orderCreateTransaction"]["id"]
+                        ...
+                    else:
+                        print("[INFO] Order was not filled or was canceled.")
+
+                    timestamp = response["orderCreateTransaction"].get("time", "")
+                    trade_type = response["orderCreateTransaction"].get("type", "")
+                    reason = response["orderCreateTransaction"].get("reason", "")
+                    timeInForce = response["orderCreateTransaction"].get(
+                        "timeInForce", ""
+                    )
+                    relatedTransactionIDs = response.get("relatedTransactionIDs", [])
+
+                    trade_manager.register_trade(
+                        trade_id=trade_id,
+                        trade_info={
+                            "type": trade_type,
+                            "reason": reason,
+                            "timestamp": timestamp,
+                            "instrument": self.pair,
+                            "units": position_size,
+                            "direction": direction,
+                            "entry_price": self.current_price,
+                            "stop_loss": stop_loss_price,
+                            "take_profit": take_profit_price,
+                            "timeInForce": timeInForce,
+                            "relatedTransactionIDs": relatedTransactionIDs,
+                        },
+                    )
+
+                except Exception as e:
+                    print(f"[ERROR] Failed to place order: {e}")
+            else:
+                print("[Market Closed] Trading skipped due to market closure.")
 
             time.sleep(30)

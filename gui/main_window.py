@@ -2,6 +2,7 @@
 
 from oandapyV20 import API
 from oandapyV20.endpoints.accounts import AccountDetails, AccountInstruments
+from oandapyV20.endpoints.positions import OpenPositions
 from oandapyV20.exceptions import V20Error
 from PySide6.QtWidgets import (
     QApplication,
@@ -18,13 +19,13 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QGridLayout,
 )
-from PySide6.QtCore import QDateTime, Qt
 import sys
 from launch_strategy import load_strategies, launch_strategy
 from utils.trade_tools import close_all_positions
 import json
 import os
 from threading import Thread
+from PySide6.QtCore import QDateTime, Qt, Signal, QObject
 
 
 # Load user_config.json file for persistance
@@ -49,8 +50,14 @@ def save_config_to_file(config):
 
 
 class MainWindow(QWidget):
+    strategy_error_signal = Signal(str)
+    strategy_complete_signal = Signal(str)
+    strategy_info_signal = Signal(str)
+
     def __init__(self):
         super().__init__()
+        self.strategy_error_signal.connect(self.show_error_message)
+        self.strategy_info_signal.connect(self.show_info_message)
         self.start_requested = False
         self.stop_requested = False
         self.API_connected = False
@@ -262,6 +269,12 @@ class MainWindow(QWidget):
         elif choice == "Risk:Reward Ratio":
             self.rr_ratio_input.setVisible(True)
 
+    def show_error_message(self, msg):
+        QMessageBox.critical(self, "Strategy Error", msg)
+
+    def show_info_message(self, msg):
+        QMessageBox.information(self, "Strategy Info", msg)
+
     def connect_to_oanda(self):
         token = self.token_input.text().strip()
         account_id = self.account_id_input.text().strip()
@@ -408,32 +421,51 @@ class MainWindow(QWidget):
 
         save_config_to_file(config)
 
+    # Handle _close all trades in background thread
+
     def handle_close_all_trades(self):
-        if self.API_connected:
-            token = self.token_input.text().strip()
-            account_id = self.account_id_input.text().strip()
-            environment = self.env_dropdown.currentText()
+        from threading import Thread
+        from utils.trade_tools import close_all_positions
 
-            if not token or not account_id:
-                QMessageBox.warning(
-                    self, "Missing Info", "Please enter API token and account ID."
-                )
-                return
-
-            closed = close_all_positions(token, account_id, environment)
-
-            if closed:
-                QMessageBox.information(
-                    self, "Success", f"Closed {len(closed)} open position(s)."
-                )
-            else:
-                QMessageBox.information(
-                    self, "No Positions", "No open positions were found."
-                )
-        else:
-            QMessageBox.information(
-                self, "Close All Trades: Error", "API not connected."
+        if not self.API_connected:
+            QMessageBox.warning(
+                self, "API Error", "Please connect to the API before closing trades."
             )
+            return
+
+        token = self.token_input.text().strip()
+        account_id = self.account_id_input.text().strip()
+        environment = self.env_dropdown.currentText()
+
+        if not token or not account_id:
+            QMessageBox.warning(
+                self, "Missing Credentials", "Token or Account ID is missing."
+            )
+            return
+
+        def background_close():
+
+            client = API(access_token=token, environment=environment)
+            try:  # to close all trades
+                closed = close_all_positions(token, account_id, environment)
+                # Check if any trades left open
+                positions = client.request(OpenPositions(accountID=account_id))
+                print(f"[DEBUG] Open Positions: {positions}")
+                # Alert the user
+                if not positions:
+                    self.strategy_info_signal.emit(
+                        f"✅ Closed {len(closed)} open position(s)."
+                    )
+                else:
+                    self.strategy_info_signal.emit(
+                        "⚠️ No open positions were found or market is closed."
+                    )
+            except Exception as e:
+                self.strategy_error_signal.emit(
+                    f"[ERROR] Failed to close positions: {str(e)}"
+                )
+
+        Thread(target=background_close, daemon=True).start()
 
 
 if __name__ == "__main__":

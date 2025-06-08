@@ -1,10 +1,8 @@
-# trade_manager.py
-# Create TradeManager base class and utility function to update stop loss
-
 from oandapyV20 import API
-from oandapyV20.endpoints.trades import TradeCRCDO
+from oandapyV20.endpoints.trades import TradeCRCDO, TradeClose
 from typing import Optional, Dict
 from logs.trade_logger import log_trade
+from datetime import datetime
 
 
 class TradeManager:
@@ -16,22 +14,24 @@ class TradeManager:
     def register_trade(self, trade_id: str, trade_info: Dict):
         self.active_trades[trade_id] = trade_info
         print(f"[TradeManager] Registered trade: {trade_id}")
-
-        # Log to trade logger
-        def register_trade(self, trade_id: str, trade_info: Dict):
-            self.active_trades[trade_id] = trade_info
-            print(f"[TradeManager] Registered trade: {trade_id}")
-            log_trade(
-                {
-                    "trade_id": trade_id,
-                    "instrument": trade_info["instrument"],
-                    "direction": trade_info["direction"],
-                    "units": trade_info["units"],
-                    "entry_price": trade_info["entry_price"],
-                    "stop_loss": trade_info["sl"],
-                    "take_profit": trade_info["tp"],
-                }
-            )
+        log_trade(
+            {
+                "trade_id": trade_id,
+                "instrument": trade_info.get("instrument", ""),
+                "direction": trade_info.get("direction", ""),
+                "units": trade_info.get("units", ""),
+                "entry_price": trade_info.get("entry_price", ""),
+                "stop_loss": trade_info.get("stop_loss", ""),
+                "take_profit": trade_info.get("take_profit", ""),
+                "timestamp": trade_info.get("timestamp", datetime.utcnow().isoformat()),
+                "type": trade_info.get("type", ""),
+                "reason": trade_info.get("reason", ""),
+                "timeInForce": trade_info.get("timeInForce", ""),
+                "relatedTransactionIDs": str(
+                    trade_info.get("relatedTransactionIDs", "")
+                ),
+            }
+        )
 
     def update_stop_loss(
         self, trade_id: str, new_sl_price: float = None, new_tp_price: float = None
@@ -58,5 +58,18 @@ class TradeManager:
             return False
 
     def close_trade(self, trade_id: str) -> bool:
-        # Placeholder: Will add logic with TradeClose endpoint if needed
-        return False
+        try:
+            r = TradeClose(accountID=self.account_id, tradeID=trade_id)
+            response = self.client.request(r)
+            closed_info = self.active_trades.pop(trade_id, {})
+            print(f"[TradeManager] Closed trade {trade_id}: {response}")
+
+            if closed_info:
+                closed_info["exit_time"] = datetime.utcnow().isoformat()
+                closed_info["closed"] = True
+                log_trade(closed_info)  # Re-log with closed status (optional)
+
+            return True
+        except Exception as e:
+            print(f"[TradeManager][ERROR] Failed to close trade {trade_id}: {e}")
+            return False

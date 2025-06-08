@@ -66,3 +66,18 @@ def fetch_current_price(token, account_id, environment, instrument):
             print(f"[ERROR] Could not fetch price: {e}")
         else:
             print(f"[ERROR] Could not fetch price: {e}")
+
+
+def is_market_open(client, account_id, instrument):
+    try:
+        params = {"instruments": instrument}
+        r = PricingInfo(accountID=account_id, params=params)
+        response = client.request(r)
+
+        prices = response.get("prices", [])
+        if prices and "bids" in prices[0] and "asks" in prices[0]:
+            return True  # Prices available = market open
+        return False
+    except V20Error as e:
+        print(f"[Market Check] V20Error: {e}")
+        return False

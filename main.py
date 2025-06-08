@@ -6,9 +6,7 @@ from core.news_filter import NewsFilter
 from core.max_drawdown import MaxDrawdownChecker
 from oandapyV20 import API
 from core.trading_time import is_within_trading_window
-from PySide6.QtWidgets import QMessageBox
 from utils.account_tools import account_balance
-import os
 
 
 def run_strategy(config, gui_parent=None):
@@ -57,8 +55,8 @@ def run_strategy(config, gui_parent=None):
                 if drawdown_checker.is_drawdown_exceeded():
                     msg = "[HALT] Max drawdown amount reached. Trading suspended for today."
                     print(msg)
-                    if gui_parent:
-                        QMessageBox.warning(gui_parent, "Max Drawdown Reached", msg)
+                    if gui_parent and hasattr(gui_parent, "strategy_error_signal"):
+                        gui_parent.strategy_error_signal.emit(msg)
                     return
         except ValueError:
             print("[WARNING] Invalid max_drawdown value, skipping drawdown check.")
@@ -68,8 +66,8 @@ def run_strategy(config, gui_parent=None):
         if not is_within_trading_window(config):
             msg = "[HALT] Time Outside of Trading Window. Trading suspended."
             print(msg)
-            if gui_parent:
-                QMessageBox.warning(gui_parent, "Outside of Trading Time Frame", msg)
+            if gui_parent and hasattr(gui_parent, "strategy_error_signal"):
+                gui_parent.strategy_error_signal.emit("Outside of Trading Time Frame")
             return
 
     # --- Step 2: News Filter Check ---
@@ -81,8 +79,10 @@ def run_strategy(config, gui_parent=None):
                     "[HALT] Trading suspended due to upcoming impactful economic news."
                 )
                 print(msg)
-                if gui_parent:
-                    QMessageBox.warning(gui_parent, "News Filter", msg)
+                if gui_parent and hasattr(gui_parent, "strategy_error_signal"):
+                    gui_parent.strategy_error_signal.emit(
+                        f" News Filter Error: {str(e)}"
+                    )
                 return
         else:
             news_filter = None
@@ -125,14 +125,12 @@ def run_strategy(config, gui_parent=None):
     # --- Step 4: Run strategy ---
     try:
         strategy.run(stop_flag=config.get("stop_flag"))
-        if gui_parent:
-            QMessageBox.information(
-                gui_parent,
-                "Strategy Launched",
-                f"Strategy '{strategy_name}' is now running.",
-            )
         print(f"[INFO] Strategy '{strategy_name}' launched successfully.")
+        if gui_parent and hasattr(gui_parent, "strategy_error_signal"):
+            gui_parent.strategy_error_signal.emit(
+                f"Strategy '{strategy_name}' is now running."
+            )
     except Exception as e:
         print(f"[ERROR] Strategy '{strategy_name}' failed to execute: {e}")
-        if gui_parent:
-            QMessageBox.critical(gui_parent, "Error: Strategy Launch Failed", str(e))
+        if gui_parent and hasattr(gui_parent, "strategy_error_signal"):
+            gui_parent.strategy_error_signal.emit(f"Error: {str(e)}")

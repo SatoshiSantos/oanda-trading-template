@@ -94,6 +94,7 @@ def launch_strategy(self, stop_flag=None):
                     self, "Backtest", "Backtest not implemented yet."
                 )
         except Exception as e:
-            QMessageBox.critical(self, "Strategy Error", str(e))
+            if hasattr(self, "strategy_error_signal"):
+                self.strategy_error_signal.emit(str(e))
 
     threading.Thread(target=run_in_thread, daemon=True).start()
