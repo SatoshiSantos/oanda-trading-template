@@ -18,16 +18,19 @@ class Strategy(StrategyBase):
         print(f"Pair: {self.pair}, Timeframe: {self.chart_timeframe}")
         print(f"News Filter Active: {self.news_filter is not None}")
 
-        self.config["direction"] = self.config.get("direction", "Buy")
+        self.config["direction"] = self.config.get("direction")
         direction = self.config["direction"]
+
         client = API(
             access_token=self.config["token"], environment=self.config["environment"]
         )
+
         trade_manager = TradeManager(
             client, self.config["account_id"]
         )  # ✅ Init TradeManager
 
         while not (self.stop_flag and self.stop_flag()):
+
             sl_handler = StopLossStrategy(self.config)
             tp_handler = TakeProfitStrategy(self.config)
 

@@ -125,11 +125,13 @@ def run_strategy(config, gui_parent=None):
     # --- Step 4: Run strategy ---
     try:
         strategy.run(stop_flag=config.get("stop_flag"))
-        print(f"[INFO] Strategy '{strategy_name}' launched successfully.")
-        if gui_parent and hasattr(gui_parent, "strategy_error_signal"):
-            gui_parent.strategy_error_signal.emit(
-                f"Strategy '{strategy_name}' is now running."
-            )
+        stop_requested = config.get("stop_flag")
+        if not stop_requested:
+            print(f"[INFO] Strategy '{strategy_name}' launched successfully.")
+            if gui_parent and hasattr(gui_parent, "strategy_error_signal"):
+                gui_parent.strategy_error_signal.emit(
+                    f"Strategy '{strategy_name}' is now running."
+                )
     except Exception as e:
         print(f"[ERROR] Strategy '{strategy_name}' failed to execute: {e}")
         if gui_parent and hasattr(gui_parent, "strategy_error_signal"):

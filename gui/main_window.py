@@ -424,9 +424,6 @@ class MainWindow(QWidget):
     # Handle _close all trades in background thread
 
     def handle_close_all_trades(self):
-        from threading import Thread
-        from utils.trade_tools import close_all_positions
-
         if not self.API_connected:
             QMessageBox.warning(
                 self, "API Error", "Please connect to the API before closing trades."
@@ -444,21 +441,34 @@ class MainWindow(QWidget):
             return
 
         def background_close():
-
             client = API(access_token=token, environment=environment)
-            try:  # to close all trades
-                closed = close_all_positions(token, account_id, environment)
-                # Check if any trades left open
+            try:
+                # Fetch current open positions to verify
                 positions = client.request(OpenPositions(accountID=account_id))
-                print(f"[DEBUG] Open Positions: {positions}")
-                # Alert the user
-                if not positions:
+                open_positions = positions.get("positions", [])
+
+                if not open_positions:
+                    self.strategy_info_signal.emit(
+                        f"Open Positions: {len(open_positions)}"
+                    )
+                    print("No open positions to close")
+                    return
+
+                # Attempt to close all open positions
+                closed = close_all_positions(token, account_id, environment)
+                # check
+                positions = client.request(OpenPositions(accountID=account_id))
+                open_positions = positions.get("positions", [])
+
+                print(f"[DEBUG] Remaining Open Positions: {open_positions}")
+
+                if not open_positions:
                     self.strategy_info_signal.emit(
                         f"✅ Closed {len(closed)} open position(s)."
                     )
                 else:
                     self.strategy_info_signal.emit(
-                        "⚠️ No open positions were found or market is closed."
+                        f"⚠️ Some positions remain open. {len(open_positions)} still active."
                     )
             except Exception as e:
                 self.strategy_error_signal.emit(
