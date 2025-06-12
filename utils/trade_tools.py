@@ -4,6 +4,8 @@ from oandapyV20 import API
 from oandapyV20.endpoints.positions import OpenPositions, PositionClose
 from oandapyV20.endpoints.trades import TradeCRCDO
 from oandapyV20.exceptions import V20Error
+from oandapyV20.endpoints.trades import OpenTrades
+from core.trade_manager import TradeManager
 
 
 def close_all_positions(token: str, account_id: str, environment: str = "practice"):
@@ -44,6 +46,36 @@ def close_all_positions(token: str, account_id: str, environment: str = "practic
     except Exception as e:
         print(f"[ERROR] Unexpected error during position closure: {e}")
         return []
+
+
+def close_all_trades_by_id(api_client, account_id):
+    try:
+        # Get open trades
+        r = OpenTrades(accountID=account_id)
+        trades_response = api_client.request(r)
+        trade_manager = TradeManager(api_client, account_id)
+
+        count = 0
+        for trade in trades_response.get("trades", []):
+            trade_id = trade["id"]
+            trade_info = {
+                "trade_id": trade_id,
+                "instrument": trade.get("instrument", ""),
+                "direction": "Buy" if float(trade["currentUnits"]) > 0 else "Sell",
+                "units": trade["currentUnits"],
+                "entry_price": trade.get("price", ""),
+                "stop_loss": trade.get("stopLossOrder", {}).get("price", ""),
+                "take_profit": trade.get("takeProfitOrder", {}).get("price", ""),
+                "timestamp": trade.get("openTime", ""),
+            }
+            trade_manager.register_trade(trade_id, trade_info)
+            trade_manager.close_trade(trade_id)
+            count += 1
+
+        return count
+    except Exception as e:
+        print(f"[Error] Failed to close trades by ID: {e}")
+        return 0
 
 
 def update_trade_stop_loss(

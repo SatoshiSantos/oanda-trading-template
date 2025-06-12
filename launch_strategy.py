@@ -30,7 +30,7 @@ def load_strategies(self):
     self.strategy_dropdown.addItems(strategies)
 
 
-def launch_strategy(self, stop_flag=None):
+def launch_strategy(self, stop_flag=None, gui_parent=None):
     token = self.token_input.text().strip()
     account_id = self.account_id_input.text().strip()
     environment = self.env_dropdown.currentText()
@@ -39,9 +39,10 @@ def launch_strategy(self, stop_flag=None):
     try:
         current_price = fetch_current_price(token, account_id, environment, instrument)
     except Exception as e:
-        QMessageBox.critical(
-            self, "Price Fetch Error", f"Failed to get current price: {e}"
-        )
+        if gui_parent and hasattr(gui_parent, "strategy_error_signal"):
+            gui_parent.strategy_error_signal.emit(
+                f"[PRICE ERROR] Could Not Fetch Current Price {e}"
+            )
         return
 
     trade_direction = self.direction_dropdown.currentText()
@@ -88,7 +89,7 @@ def launch_strategy(self, stop_flag=None):
     def run_in_thread():
         try:
             if config["run_mode"] == "Live":
-                run_strategy(config, gui_parent=self)
+                run_strategy(config, gui_parent=None)
             else:
                 QMessageBox.information(
                     self, "Backtest", "Backtest not implemented yet."

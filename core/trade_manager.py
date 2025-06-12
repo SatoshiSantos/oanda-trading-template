@@ -1,3 +1,5 @@
+# trade_manager.py
+
 from oandapyV20 import API
 from oandapyV20.endpoints.trades import TradeCRCDO, TradeClose
 from typing import Optional, Dict
@@ -14,8 +16,19 @@ class TradeManager:
     def register_trade(self, trade_id: str, trade_info: Dict):
         self.active_trades[trade_id] = trade_info
         print(f"[TradeManager] Registered trade: {trade_id}")
+        trade_info["trade_id"] = trade_id  # Ensure ID is attached
+
+        # Default values
+        trade_info.setdefault("timestamp", datetime.utcnow().isoformat())
+        trade_info.setdefault("exit_time", "")
+        trade_info.setdefault("status", "")
+        trade_info.setdefault("closed", False)
+        trade_info.setdefault("log_type", "entry")
+
         log_trade(
             {
+                "log_type": trade_info["log_type"],
+                "timestamp": trade_info["timestamp"],
                 "trade_id": trade_id,
                 "instrument": trade_info.get("instrument", ""),
                 "direction": trade_info.get("direction", ""),
@@ -23,13 +36,15 @@ class TradeManager:
                 "entry_price": trade_info.get("entry_price", ""),
                 "stop_loss": trade_info.get("stop_loss", ""),
                 "take_profit": trade_info.get("take_profit", ""),
-                "timestamp": trade_info.get("timestamp", datetime.utcnow().isoformat()),
                 "type": trade_info.get("type", ""),
                 "reason": trade_info.get("reason", ""),
                 "timeInForce": trade_info.get("timeInForce", ""),
-                "relatedTransactionIDs": str(
-                    trade_info.get("relatedTransactionIDs", "")
+                "relatedTransactionIDs": ", ".join(
+                    map(str, trade_info.get("relatedTransactionIDs", []))
                 ),
+                "status": trade_info["status"],
+                "exit_time": trade_info["exit_time"],
+                "closed": trade_info["closed"],
             }
         )
 
@@ -65,9 +80,27 @@ class TradeManager:
             print(f"[TradeManager] Closed trade {trade_id}: {response}")
 
             if closed_info:
+                # Ensure essential fields exist
+                closed_info.setdefault("trade_id", trade_id)
+                closed_info.setdefault("timestamp", datetime.utcnow().isoformat())
+                closed_info.setdefault("instrument", "")
+                closed_info.setdefault("direction", "")
+                closed_info.setdefault("units", "")
+                closed_info.setdefault("entry_price", "")
+                closed_info.setdefault("stop_loss", "")
+                closed_info.setdefault("take_profit", "")
+                closed_info.setdefault("type", "MANUAL")
+                closed_info.setdefault("reason", "MANUAL_CLOSE")
+                closed_info.setdefault("timeInForce", "")
+                closed_info["relatedTransactionIDs"] = ", ".join(
+                    map(str, closed_info.get("relatedTransactionIDs", []))
+                )
+                closed_info["status"] = "manual_close_executed"
                 closed_info["exit_time"] = datetime.utcnow().isoformat()
                 closed_info["closed"] = True
-                log_trade(closed_info)  # Re-log with closed status (optional)
+                closed_info["log_type"] = "closed"
+
+                log_trade(closed_info)
 
             return True
         except Exception as e:

@@ -93,7 +93,10 @@ def run_strategy(config, gui_parent=None):
     # current price
     # Validate critical runtime values
     if "current_price" not in config:
-        raise ValueError("[Config] 'unable to fetch current_price'.")
+        if gui_parent and hasattr(gui_parent, "strategy_error_signal"):
+            gui_parent.strategy_error_signal.emit(
+                "[PRICE ERROR] 'unable to fetch current_price'."
+            )
     current_price = config["current_price"]
 
     # Trade Direction

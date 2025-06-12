@@ -62,7 +62,10 @@ class Strategy(StrategyBase):
                 }
             }
 
-            # TODO: Trading conditions
+            if direction == "Both" or direction == "Buy":
+                ...  # TODO: BUY conditions
+            if direction == "Both" or direction == "Sell":
+                ...  # TODO: SELL conditions
 
             # check if maret open
             if is_market_open(client, self.config["account_id"], self.pair):
@@ -71,28 +74,34 @@ class Strategy(StrategyBase):
                     r = OrderCreate(
                         accountID=self.config["account_id"], data=order_data
                     )
+
                     response = client.request(r)
-                    print(f"[ORDER PLACED] Trade executed successfully: {response}")
 
                     # Check if order was created
                     if "orderCreateTransaction" in response:
                         trade_id = response["orderCreateTransaction"]["id"]
-                        ...
-                    else:
-                        print("[INFO] Order was not filled or was canceled.")
-
+                        print(f"[ORDER PLACED] Order created successfully: {trade_id}")
                     timestamp = response["orderCreateTransaction"].get("time", "")
-                    trade_type = response["orderCreateTransaction"].get("type", "")
+                    order_type = response["orderCreateTransaction"].get("type", "")
                     reason = response["orderCreateTransaction"].get("reason", "")
                     timeInForce = response["orderCreateTransaction"].get(
                         "timeInForce", ""
                     )
                     relatedTransactionIDs = response.get("relatedTransactionIDs", [])
 
+                    # Default to 'filled' unless explicitly canceled
+                    status = "filled"
+                    if "orderCancelTransaction" in response:
+                        cancel_reason = response["orderCancelTransaction"].get(
+                            "reason", ""
+                        )
+                        status = f"canceled ({cancel_reason})"
+                        print(f"[ORDER CANCELED] {trade_id} ({cancel_reason})")
+
                     trade_manager.register_trade(
                         trade_id=trade_id,
                         trade_info={
-                            "type": trade_type,
+                            "type": order_type,
                             "reason": reason,
                             "timestamp": timestamp,
                             "instrument": self.pair,
@@ -103,6 +112,7 @@ class Strategy(StrategyBase):
                             "take_profit": take_profit_price,
                             "timeInForce": timeInForce,
                             "relatedTransactionIDs": relatedTransactionIDs,
+                            "status": status,
                         },
                     )
 

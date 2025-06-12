@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 import sys
 from launch_strategy import load_strategies, launch_strategy
-from utils.trade_tools import close_all_positions
+from utils.trade_tools import close_all_trades_by_id
 import json
 import os
 from threading import Thread
@@ -145,9 +145,7 @@ class MainWindow(QWidget):
         self.start_input = QDateTimeEdit(QDateTime.currentDateTime())
         self.end_label = QLabel("Trading End Time:")
         self.end_input = QDateTimeEdit(QDateTime.currentDateTime())
-        self.news_buffer_label = QLabel("Minutes to Avoid Before/After News:")
-        self.news_buffer_input = QLineEdit()
-        self.news_buffer_input.setPlaceholderText("e.g., 15")
+
         self.news_impact_label = QLabel("News Impact Filter:")
         self.news_high = QCheckBox("High")
         self.news_med = QCheckBox("Medium")
@@ -155,27 +153,32 @@ class MainWindow(QWidget):
         self.news_high.stateChanged.connect(self.update_news_inputs_visibility)
         self.news_med.stateChanged.connect(self.update_news_inputs_visibility)
         self.news_low.stateChanged.connect(self.update_news_inputs_visibility)
+        self.news_buffer_label = QLabel("Minutes to Avoid Before/After News:")
+        self.news_buffer_input = QLineEdit()
         self.finnhub_api_label = QLabel("Finnhub API Key:")
         self.finnhub_api_input = QLineEdit()
         self.news_quote_checkbox = QCheckBox("Filter by Quote Currency Too")
         self.finnhub_api_label.setVisible(False)
         self.finnhub_api_input.setVisible(False)
         self.news_quote_checkbox.setVisible(False)
+        self.news_buffer_label.setVisible(False)
+        self.news_buffer_input.setVisible(False)
         news_impact_row = QHBoxLayout()
         news_impact_row.addWidget(self.news_high)
         news_impact_row.addWidget(self.news_med)
         news_impact_row.addWidget(self.news_low)
-        schedule_layout.addWidget(self.finnhub_api_label, 4, 0)
-        schedule_layout.addWidget(self.finnhub_api_input, 4, 1)
-        schedule_layout.addWidget(self.news_quote_checkbox, 5, 1)
         schedule_layout.addWidget(self.start_label, 0, 0)
         schedule_layout.addWidget(self.start_input, 0, 1)
         schedule_layout.addWidget(self.end_label, 1, 0)
         schedule_layout.addWidget(self.end_input, 1, 1)
-        schedule_layout.addWidget(self.news_buffer_label, 2, 0)
-        schedule_layout.addWidget(self.news_buffer_input, 2, 1)
-        schedule_layout.addWidget(self.news_impact_label, 3, 0)
-        schedule_layout.addLayout(news_impact_row, 3, 1)
+        schedule_layout.addWidget(self.news_impact_label, 2, 0)
+        schedule_layout.addLayout(news_impact_row, 2, 1)
+        schedule_layout.addWidget(self.news_buffer_label, 3, 0)
+        schedule_layout.addWidget(self.news_buffer_input, 3, 1)
+        schedule_layout.addWidget(self.finnhub_api_label, 4, 0)
+        schedule_layout.addWidget(self.finnhub_api_input, 4, 1)
+        schedule_layout.addWidget(self.news_quote_checkbox, 5, 1)
+
         schedule_group.setLayout(schedule_layout)
         main_layout.addWidget(schedule_group)
 
@@ -247,6 +250,8 @@ class MainWindow(QWidget):
         self.finnhub_api_label.setVisible(any_checked)
         self.finnhub_api_input.setVisible(any_checked)
         self.news_quote_checkbox.setVisible(any_checked)
+        self.news_buffer_label.setVisible(any_checked)
+        self.news_buffer_input.setVisible(any_checked)
 
     def update_sl_inputs(self):
         self.sl_pips_input.setVisible(False)
@@ -366,15 +371,20 @@ class MainWindow(QWidget):
     """
 
     def handle_launch(self):
-        self.stop_requested = False  # Reset stop flag
-        self.start_requested = True  # Set start flag
-        self.save_user_config()  # save user config
+        if self.API_connected:
+            self.stop_requested = False  # Reset stop flag
+            self.start_requested = True  # Set start flag
+            self.save_user_config()  # save user config
 
-        # Run strategy in a new thread so GUI doesn't freeze
-        def background_launch():
-            launch_strategy(self, stop_flag=lambda: self.stop_requested)
+            # Run strategy in a new thread so GUI doesn't freeze
+            def background_launch():
+                launch_strategy(
+                    self, stop_flag=lambda: self.stop_requested, gui_parent=self
+                )
 
-        Thread(target=background_launch).start()
+            Thread(target=background_launch).start()
+        else:
+            QMessageBox.information(self, "Launch Error", "Connect to API")
 
     def handle_stop(self):
         if self.start_requested:  # Check if strategy launched
@@ -441,38 +451,70 @@ class MainWindow(QWidget):
             return
 
         def background_close():
-            client = API(access_token=token, environment=environment)
             try:
-                # Fetch current open positions to verify
-                positions = client.request(OpenPositions(accountID=account_id))
-                open_positions = positions.get("positions", [])
+                client = API(access_token=token, environment=environment)
+                from core.trade_manager import (
+                    TradeManager,
+                )  # Lazy import to avoid circularity
+                from oandapyV20.endpoints.trades import OpenTrades
 
-                if not open_positions:
-                    self.strategy_info_signal.emit(
-                        f"Open Positions: {len(open_positions)}"
-                    )
-                    print("No open positions to close")
+                # Fetch open trades, not just positions
+                open_trades_req = OpenTrades(accountID=account_id)
+                open_trades_response = client.request(open_trades_req)
+                open_trades = open_trades_response.get("trades", [])
+
+                if not open_trades:
+                    self.strategy_info_signal.emit("No open trades to close.")
+                    print("No open trades found.")
                     return
 
-                # Attempt to close all open positions
-                closed = close_all_positions(token, account_id, environment)
-                # check
-                positions = client.request(OpenPositions(accountID=account_id))
-                open_positions = positions.get("positions", [])
+                trade_manager = TradeManager(client, account_id)
+                success_count = 0
+                fail_count = 0
 
-                print(f"[DEBUG] Remaining Open Positions: {open_positions}")
+                for trade in open_trades:
+                    trade_id = trade.get("id")
+                    trade_manager.register_trade(
+                        trade_id=trade_id,
+                        trade_info={
+                            "instrument": trade.get("instrument"),
+                            "direction": (
+                                "Buy"
+                                if int(trade.get("currentUnits", 0)) > 0
+                                else "Sell"
+                            ),
+                            "units": abs(int(trade.get("currentUnits", 0))),
+                            "entry_price": float(trade.get("price", 0.0)),
+                            "stop_loss": trade.get("stopLossOrder", {}).get(
+                                "price", ""
+                            ),
+                            "take_profit": trade.get("takeProfitOrder", {}).get(
+                                "price", ""
+                            ),
+                            "timestamp": trade.get("openTime", ""),
+                            "type": trade.get("type", "MARKET_ORDER"),
+                            "reason": "MANUAL_CLOSE",
+                            "timeInForce": trade.get("timeInForce", ""),
+                            "relatedTransactionIDs": trade.get("tradeIDs", []),
+                            "status": "manual_close_pending",
+                            "closed": False,
+                            "log_type": "manual_close_pending",
+                        },
+                    )
+                    success = trade_manager.close_trade(trade_id)
+                    if success:
+                        success_count += 1
+                    else:
+                        fail_count += 1
 
-                if not open_positions:
-                    self.strategy_info_signal.emit(
-                        f"✅ Closed {len(closed)} open position(s)."
-                    )
-                else:
-                    self.strategy_info_signal.emit(
-                        f"⚠️ Some positions remain open. {len(open_positions)} still active."
-                    )
+                self.strategy_info_signal.emit(
+                    f"✅ Closed {success_count} trade(s)."
+                    + (f" ⚠️ {fail_count} failed." if fail_count else "")
+                )
+
             except Exception as e:
                 self.strategy_error_signal.emit(
-                    f"[ERROR] Failed to close positions: {str(e)}"
+                    f"[ERROR] Failed to close trades: {str(e)}"
                 )
 
         Thread(target=background_close, daemon=True).start()
