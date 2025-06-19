@@ -3,7 +3,6 @@ import os
 import glob
 import threading
 from threading import Event
-from PySide6.QtWidgets import QMessageBox
 from PySide6.QtCore import Qt
 from main import run_strategy
 from utils.price_tools import fetch_current_price

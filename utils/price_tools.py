@@ -19,6 +19,12 @@ def fetch_candle_data(
     params = {"granularity": granularity, "count": count, "price": "M"}
     r = InstrumentsCandles(instrument=instrument, params=params)
     response = client.request(r)
+    if not response["candles"]:
+        raise RuntimeError(
+            f"No candle data returned for {instrument}. "
+            "Check instrument code or network connectivity."
+        )
+
     closes = [
         float(candle["mid"]["c"])
         for candle in response["candles"]
@@ -51,11 +57,19 @@ def fetch_current_price(token, account_id, environment, instrument):
         client = API(access_token=token, environment=environment)
         params = {"instruments": instrument}
         r = PricingInfo(accountID=account_id, params=params)
+        # utils/price_tools.py  – replace the bottom of fetch_current_price()
+
         response = client.request(r)
-        prices = response["prices"][0]
-        # Return the average of bid and ask as current price
-        bid = float(prices["bids"][0]["price"])
-        ask = float(prices["asks"][0]["price"])
+        prices = response.get("prices", [])
+
+        if not prices:  # ✨ <- ADD THIS
+            raise RuntimeError(
+                f"No price data returned for {instrument}. "
+                "Check instrument code or network connectivity."
+            )
+
+        bid = float(prices[0]["bids"][0]["price"])
+        ask = float(prices[0]["asks"][0]["price"])
         return round((bid + ask) / 2, 5)
 
     except V20Error as e:
