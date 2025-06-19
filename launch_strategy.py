@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QMessageBox
 from PySide6.QtCore import Qt
 from main import run_strategy
 from utils.price_tools import fetch_current_price
+from backtest import run_backtest
 
 stop_flag = Event()
 
@@ -90,10 +91,12 @@ def launch_strategy(self, stop_flag=None, gui_parent=None):
         try:
             if config["run_mode"] == "Live":
                 run_strategy(config, gui_parent=None)
-            else:
-                QMessageBox.information(
-                    self, "Backtest", "Backtest not implemented yet."
-                )
+            else:  # --- NEW ---
+                results = run_backtest(config, candle_count=1000)
+
+                # 👉 emit a Qt signal with `results`
+                if hasattr(self, "backtest_results_signal"):
+                    self.backtest_results_signal.emit(results)
         except Exception as e:
             if hasattr(self, "strategy_error_signal"):
                 self.strategy_error_signal.emit(str(e))

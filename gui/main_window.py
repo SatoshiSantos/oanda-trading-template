@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QDateTimeEdit,
     QCheckBox,
     QGridLayout,
+    QDialog,
 )
 import sys
 from launch_strategy import load_strategies, launch_strategy
@@ -26,6 +27,8 @@ import json
 import os
 from threading import Thread
 from PySide6.QtCore import QDateTime, Qt, Signal, QObject
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as Canvas
+import matplotlib.pyplot as plt
 
 
 # Load user_config.json file for persistance
@@ -53,6 +56,7 @@ class MainWindow(QWidget):
     strategy_error_signal = Signal(str)
     strategy_complete_signal = Signal(str)
     strategy_info_signal = Signal(str)
+    backtest_results_signal = Signal(dict)
 
     def __init__(self):
         super().__init__()
@@ -61,6 +65,7 @@ class MainWindow(QWidget):
         self.start_requested = False
         self.stop_requested = False
         self.API_connected = False
+        self.backtest_results_signal.connect(self.show_backtest_results)
 
         self.setWindowTitle("OANDA Trading App")
 
@@ -518,6 +523,35 @@ class MainWindow(QWidget):
                 )
 
         Thread(target=background_close, daemon=True).start()
+
+    def show_backtest_results(self, results: dict):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Back-test Summary")
+
+        trades = results["trades"]
+        equity = results["equity_curve"]
+        profit = results["profit"]
+
+        summary = (
+            f"Trades executed : {len(trades)}\n"
+            f"Initial balance : {results['initial_balance']:.2f}\n"
+            f"Final balance   : {results['final_balance']:.2f}\n"
+            f"Total P/L       : {profit:+.2f}"
+        )
+
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel(summary))
+
+        # ---------- equity curve plot ----------
+        if equity:  # safety
+            fig, ax = plt.subplots()
+            ax.plot([e["time"] for e in equity], [e["equity"] for e in equity])
+            ax.set_title("Equity curve")
+            fig.tight_layout()
+            canvas = Canvas(fig)  # create the QWidget wrapper
+            canvas.setParent(dlg)  # ✨ give Qt ownership – avoids GC & keeps styling
+            lay.addWidget(canvas)  # add to the dialog’s layout
+        dlg.exec()
 
 
 if __name__ == "__main__":

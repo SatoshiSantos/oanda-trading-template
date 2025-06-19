@@ -62,10 +62,13 @@ class Strategy(StrategyBase):
                 }
             }
 
-            if direction == "Both" or direction == "Buy":
-                ...  # TODO: BUY conditions
-            if direction == "Both" or direction == "Sell":
-                ...  # TODO: SELL conditions
+            # strategies/ExampleStrategy.py  – placeholder sections
+
+            if direction in ("Both", "Buy"):
+                pass  # TODO implement BUY setup
+
+            if direction in ("Both", "Sell"):
+                pass  # TODO implement SELL setup
 
             # check if maret open
             if is_market_open(client, self.config["account_id"], self.pair):
@@ -122,3 +125,21 @@ class Strategy(StrategyBase):
                 print("[Market Closed] Trading skipped due to market closure.")
 
             time.sleep(30)
+
+    # inside strategies/ExampleStrategy.py
+
+    def backtest_step(self, candle):
+        """
+        Very naive example:
+        • Buy when candle closes green
+        • Sell when candle closes red
+        • Exit when opposite signal appears
+        """
+        close_above_open = candle["close"] > candle["open"]
+        close_below_open = candle["close"] < candle["open"]
+
+        if close_above_open:
+            return "buy"
+        if close_below_open:
+            return "sell"
+        return None  # do nothing
